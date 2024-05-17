@@ -96,19 +96,39 @@ func goodAnswersAmount(pairs []thetaResultPair) int {
 
 // Запись определённого набора точек в CSV
 // TODO все четыре набора должны идти в один файл
-func writeToCSV(fileName string, points []graphPoint) {
+func writeDataToCSV(
+	fileName string,
+	pointsActual []graphPoint,
+	pointsBirnbaum []graphPoint,
+	pointsPositiveInterval []graphPoint,
+	pointsNegativeInterval []graphPoint) {
 	file, err := os.Create("Output/" + fileName + ".csv")
 	if err != nil {
 		panic(err)
 	}
 
 	writer := csv.NewWriter(file)
-	for _, value := range points {
-		var record [2]string = [2]string{strconv.FormatFloat(value.theta, 'f', -1, 64), strconv.FormatFloat(value.frequence, 'f', -1, 64)}
+	for i := 0; i < len(pointsActual); i++ {
+		var record [8]string = [8]string {
+			strconv.FormatFloat(pointsActual[i].theta, 'f', -1, 64),
+			strconv.FormatFloat(pointsActual[i].frequence, 'f', -1, 64),
+			strconv.FormatFloat(pointsBirnbaum[i].theta, 'f', -1, 64),
+			strconv.FormatFloat(pointsBirnbaum[i].frequence, 'f', -1, 64),
+			strconv.FormatFloat(pointsPositiveInterval[i].theta, 'f', -1, 64),
+			strconv.FormatFloat(pointsPositiveInterval[i].frequence, 'f', -1, 64),
+			strconv.FormatFloat(pointsNegativeInterval[i].theta, 'f', -1, 64),
+			strconv.FormatFloat(pointsNegativeInterval[i].frequence, 'f', -1, 64),
+		}
 		if err := writer.Write(record[:]); err != nil {
 			panic(err)
 		}
 	}
+	// for _, value := range pointsActual {
+	// 	var record [2]string = [2]string{strconv.FormatFloat(value.theta, 'f', -1, 64), strconv.FormatFloat(value.frequence, 'f', -1, 64)}
+	// 	if err := writer.Write(record[:]); err != nil {
+	// 		panic(err)
+	// 	}
+	// }
 
 	writer.Flush()
 }
@@ -194,8 +214,5 @@ func main() {
 		fmt.Printf("%f; %f\n", currentPoint.theta, currentPoint.frequence)
 	}
 
-	writeToCSV("birnbaumPoints", birnbaumPoints)
-	writeToCSV("actualPoints", actualPoints)
-	writeToCSV("positiveConfidenceIntervalPoints", positiveConfidenceIntervalPoints)
-	writeToCSV("negativeConfidenceIntervalPoints", negativeConfidenceIntervalPoints)
+	writeDataToCSV("Output", actualPoints, birnbaumPoints, positiveConfidenceIntervalPoints, negativeConfidenceIntervalPoints)
 }
