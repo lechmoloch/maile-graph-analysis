@@ -1,10 +1,3 @@
-/*
-- Тетта целочисленная?
-- ОДЗ тетты?
-- Какой шаг брать? Если целочисленный, то 1?
-- Частота от 0 до 1?
-- В расчет берём только успешные выполнения?
-*/
 package main
 
 import (
@@ -15,18 +8,21 @@ import (
 	"strconv"
 )
 
+// Точка графика
 type graphPoint struct {
 	theta     float64
 	frequence float64
 }
 
+// Пара результат - уровень подготовленности
 type thetaResultPair struct {
 	theta  float64
 	result bool
 }
 
-func parseThetaResultPairs() []thetaResultPair {
-	file, err := os.Open("Data/data.csv")
+// Парсит csv-файл с результатами и теттами в соответствующий срез
+func parseThetaResultPairs(filePath string) []thetaResultPair {
+	file, err := os.Open(filePath)
 	if err != nil {
 		panic(err)
 	}
@@ -62,9 +58,10 @@ func parseThetaResultPairs() []thetaResultPair {
 	return pairs
 }
 
+// Вычисление минимальной и максимальной тетты в наборе
 func minMaxTheta(pairs []thetaResultPair) (float64, float64) {
-	min := 100.0
-	max := -100.0
+	min := 10.0
+	max := -10.0
 
 	for _, value := range pairs {
 		if value.theta < min {
@@ -79,11 +76,13 @@ func minMaxTheta(pairs []thetaResultPair) (float64, float64) {
 	return min, max
 }
 
+// Функция Бирнбаума
 func birnbaum(c float64, delta float64, theta float64) float64 {
 	exponent := math.Exp(1.71 * (theta - delta))
 	return c + (1-c)*(exponent/(1+exponent))
 }
 
+// Вычисление количества успешных выполнений задания в наборе
 func goodAnswersAmount(pairs []thetaResultPair) int {
 	amount := 0
 	for _, value := range pairs {
@@ -95,6 +94,8 @@ func goodAnswersAmount(pairs []thetaResultPair) int {
 	return amount
 }
 
+// Запись определённого набора точек в CSV
+// TODO все четыре набора должны идти в один файл
 func writeToCSV(fileName string, points []graphPoint) {
 	file, err := os.Create("Output/" + fileName + ".csv")
 	if err != nil {
@@ -113,9 +114,10 @@ func writeToCSV(fileName string, points []graphPoint) {
 }
 
 func main() {
+	const dataFilePath string = "Data/data.csv"
 	delta := 2.0
 	c := 0.001388889
-	pairs := parseThetaResultPairs()
+	pairs := parseThetaResultPairs(dataFilePath)
 	min, max := minMaxTheta(pairs)
 	step := 1.0
 	var pockets []float64
