@@ -2,24 +2,46 @@ package TaskAnalysis
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
+	"sort"
 	"strconv"
 )
 
-// * БЛОК СТРУКТУР И МЕТОДОВ
+// * ВСПОМОГАТЕЛЬНЫЕ СТРУКТУРЫ
 
 // Точка графика
 type graphPoint struct {
-	theta     float64
-	frequence float64
+	Theta     float64
+	Frequence float64
 }
 
 // Пара результат - уровень подготовленности
 type thetaResultPair struct {
-	theta  float64
-	result bool
+	Theta  float64
+	Result bool
+}
+
+// Вычисленные данные графического метода
+type GraphicalMethodData struct {
+	Verdict bool
+	Points  [][4]graphPoint
+}
+
+// Вычисленные данные метода на основе гипотез
+type HypothesisMethodData struct {
+	Verdict                        string
+	CorrectTaskLikelihoodRatio     float64
+	IndifferentTaskLikelihoodRatio float64
+	IncorrectTaskLikelihoodRatio   float64
+}
+
+// Собрание данных всех методов
+type AllMethodsData struct {
+	GraphicalMethodData  GraphicalMethodData
+	HypothesisMethodData HypothesisMethodData
 }
 
 type TaskAnalyzer struct {
@@ -27,6 +49,8 @@ type TaskAnalyzer struct {
 	guessingProbability float64
 	resultPairs         []thetaResultPair
 }
+
+// * ПУБЛИЧНЫЕ МЕТОДЫ
 
 // Конструктор TaskAnalyzer
 func NewTaskAnalyzer(
@@ -42,29 +66,63 @@ func NewTaskAnalyzer(
 	return analyzer
 }
 
+// Парсинг вычисленных данных в JSON
+func (analyzer TaskAnalyzer) WriteAllMethodsDataToJSON(outputFilePath string) {
+	pointsActual, pointsBirnbaum, pointsPositiveInterval, pointsNegativeInterval := analyzer.calculateAllGraphPoints()
+
+	var allGraphPoints [][4]graphPoint
+	for i := 0; i < len(pointsActual); i++ {
+		var currentGraphPoints [4]graphPoint = [4]graphPoint{
+			pointsActual[i],
+			pointsBirnbaum[i],
+			pointsPositiveInterval[i],
+			pointsNegativeInterval[i],
+		}
+
+		allGraphPoints = append(allGraphPoints, currentGraphPoints)
+	}
+
+	var GraphicalMethodData GraphicalMethodData = GraphicalMethodData{
+		Verdict: analyzer.makeVerdictGraphicalMethod(),
+		Points:  allGraphPoints,
+	}
+
+	var HypothesisMethodData HypothesisMethodData = HypothesisMethodData{
+		Verdict:                        analyzer.makeHypothesisMethodVerdict(),
+		CorrectTaskLikelihoodRatio:     analyzer.calculateCorrectTaskLikelihoodRatio(),
+		IndifferentTaskLikelihoodRatio: analyzer.calculateIndifferentTaskLikelihoodRatio(),
+		IncorrectTaskLikelihoodRatio:   analyzer.calculateIncorrectTaskLikelihoodRatio(),
+	}
+
+	var AllMethodsData AllMethodsData = AllMethodsData{
+		GraphicalMethodData:  GraphicalMethodData,
+		HypothesisMethodData: HypothesisMethodData,
+	}
+
+	file, _ := json.MarshalIndent(AllMethodsData, "", " ")
+	_ = os.WriteFile(outputFilePath, file, 0644)
+}
+
 // Производит csv-файл с точками для построения графика
-func (analyzer TaskAnalyzer) WriteGraphData(outputFilePath string) {
+func (analyzer TaskAnalyzer) WriteGraphDataToCSV(outputFilePath string) {
 	file, err := os.Create(outputFilePath)
 	if err != nil {
 		panic(err)
 	}
 
-	pocketPairs := analyzer.getResultPocketPairs()
-	pointsActual := analyzer.calculateActualPoints(pocketPairs)
-	pointsBirnbaum := analyzer.calculateBirnbaumPoints(pocketPairs)
-	pointsPositiveInterval, pointsNegativeInterval := analyzer.calculateConfidenceIntervalsPoints(pocketPairs)
+	pointsActual, pointsBirnbaum, pointsPositiveInterval, pointsNegativeInterval := analyzer.calculateAllGraphPoints()
 
 	writer := csv.NewWriter(file)
 	for i := 0; i < len(pointsActual); i++ {
 		var record [8]string = [8]string{
-			strconv.FormatFloat(pointsActual[i].theta, 'f', -1, 64),
-			strconv.FormatFloat(pointsActual[i].frequence, 'f', -1, 64),
-			strconv.FormatFloat(pointsBirnbaum[i].theta, 'f', -1, 64),
-			strconv.FormatFloat(pointsBirnbaum[i].frequence, 'f', -1, 64),
-			strconv.FormatFloat(pointsPositiveInterval[i].theta, 'f', -1, 64),
-			strconv.FormatFloat(pointsPositiveInterval[i].frequence, 'f', -1, 64),
-			strconv.FormatFloat(pointsNegativeInterval[i].theta, 'f', -1, 64),
-			strconv.FormatFloat(pointsNegativeInterval[i].frequence, 'f', -1, 64),
+			strconv.FormatFloat(pointsActual[i].Theta, 'f', -1, 64),
+			strconv.FormatFloat(pointsActual[i].Frequence, 'f', -1, 64),
+			strconv.FormatFloat(pointsBirnbaum[i].Theta, 'f', -1, 64),
+			strconv.FormatFloat(pointsBirnbaum[i].Frequence, 'f', -1, 64),
+			strconv.FormatFloat(pointsPositiveInterval[i].Theta, 'f', -1, 64),
+			strconv.FormatFloat(pointsPositiveInterval[i].Frequence, 'f', -1, 64),
+			strconv.FormatFloat(pointsNegativeInterval[i].Theta, 'f', -1, 64),
+			strconv.FormatFloat(pointsNegativeInterval[i].Frequence, 'f', -1, 64),
 		}
 		if err := writer.Write(record[:]); err != nil {
 			panic(err)
@@ -74,12 +132,14 @@ func (analyzer TaskAnalyzer) WriteGraphData(outputFilePath string) {
 	writer.Flush()
 }
 
+// * МЕТОДЫ ДЛЯ ГРАФИЧЕСКОГО АНАЛИЗА
+
 // Создание карманов
 // TODO - переделать механизм формирования карманов в менее дуболомный
 func (analyzer TaskAnalyzer) getResultPocketPairs() [][]thetaResultPair {
 	min, max := minMaxTheta(analyzer.resultPairs)
 	step := 1.0
-	
+
 	var pockets []float64
 	for i := min; i <= max; i += step {
 		pockets = append(pockets, i)
@@ -90,7 +150,7 @@ func (analyzer TaskAnalyzer) getResultPocketPairs() [][]thetaResultPair {
 		var currentPairs []thetaResultPair
 
 		for _, currentPair := range analyzer.resultPairs {
-			if currentPair.theta == currentPocket {
+			if currentPair.Theta == currentPocket {
 				currentPairs = append(currentPairs, currentPair)
 			}
 		}
@@ -104,10 +164,10 @@ func (analyzer TaskAnalyzer) getResultPocketPairs() [][]thetaResultPair {
 func (analyzer TaskAnalyzer) calculateActualPoints(pocketPairs [][]thetaResultPair) []graphPoint {
 	var actualPoints []graphPoint
 	for _, currentPocketPairs := range pocketPairs {
-		theta := currentPocketPairs[0].theta
-		frequence := float64(goodAnswersAmount(currentPocketPairs)) / float64(len(currentPocketPairs))
+		Theta := currentPocketPairs[0].Theta
+		Frequence := float64(goodAnswersAmount(currentPocketPairs)) / float64(len(currentPocketPairs))
 
-		var currentPoint graphPoint = graphPoint{theta, frequence}
+		var currentPoint graphPoint = graphPoint{Theta, Frequence}
 		actualPoints = append(actualPoints, currentPoint)
 	}
 
@@ -119,11 +179,11 @@ func (analyzer TaskAnalyzer) calculateBirnbaumPoints(pocketPairs [][]thetaResult
 	var birnbaumPoints []graphPoint
 	for _, currentPocket := range pocketPairs {
 		var currentPoint graphPoint
-		currentPoint.theta = currentPocket[0].theta
-		currentPoint.frequence = birnbaum(
-			analyzer.guessingProbability, 
-			analyzer.actualDifficulty, 
-			currentPocket[0].theta,
+		currentPoint.Theta = currentPocket[0].Theta
+		currentPoint.Frequence = birnbaum(
+			analyzer.guessingProbability,
+			analyzer.actualDifficulty,
+			currentPocket[0].Theta,
 		)
 		birnbaumPoints = append(birnbaumPoints, currentPoint)
 	}
@@ -136,19 +196,19 @@ func (analyzer TaskAnalyzer) calculateConfidenceIntervalsPoints(pocketPairs [][]
 	var positiveConfidenceIntervalPoints, negativeConfidenceIntervalPoints []graphPoint
 	for _, currentPocketPairs := range pocketPairs {
 		studentsAmount := float64(len(currentPocketPairs))
-		frequence := float64(goodAnswersAmount(currentPocketPairs)) / float64(len(currentPocketPairs))
-		sigma := math.Sqrt(studentsAmount * frequence * (1 - frequence))
+		Frequence := float64(goodAnswersAmount(currentPocketPairs)) / float64(len(currentPocketPairs))
+		sigma := math.Sqrt(studentsAmount * Frequence * (1 - Frequence))
 
-		theta := currentPocketPairs[0].theta
+		Theta := currentPocketPairs[0].Theta
 		var pointPositive, pointNegative graphPoint
 
 		pointPositive = graphPoint{
-			theta,
-			(birnbaum(analyzer.guessingProbability, analyzer.actualDifficulty, theta) + sigma),
+			Theta,
+			(birnbaum(analyzer.guessingProbability, analyzer.actualDifficulty, Theta) + sigma),
 		}
 		pointNegative = graphPoint{
-			theta,
-			(birnbaum(analyzer.guessingProbability, analyzer.actualDifficulty, theta) - sigma),
+			Theta,
+			(birnbaum(analyzer.guessingProbability, analyzer.actualDifficulty, Theta) - sigma),
 		}
 
 		positiveConfidenceIntervalPoints = append(positiveConfidenceIntervalPoints, pointPositive)
@@ -158,7 +218,99 @@ func (analyzer TaskAnalyzer) calculateConfidenceIntervalsPoints(pocketPairs [][]
 	return positiveConfidenceIntervalPoints, negativeConfidenceIntervalPoints
 }
 
-// * БЛОК ОТДЕЛЬНЫХ ФУНКЦИЙ
+// Вычисление всех точек разом
+func (analyzer TaskAnalyzer) calculateAllGraphPoints() ([]graphPoint, []graphPoint, []graphPoint, []graphPoint) {
+	pocketPairs := analyzer.getResultPocketPairs()
+	pointsActual := analyzer.calculateActualPoints(pocketPairs)
+	pointsBirnbaum := analyzer.calculateBirnbaumPoints(pocketPairs)
+	pointsPositiveInterval, pointsNegativeInterval := analyzer.calculateConfidenceIntervalsPoints(pocketPairs)
+
+	return pointsActual, pointsBirnbaum, pointsPositiveInterval, pointsNegativeInterval
+}
+
+// Вычисление вердикта по графическому методу
+func (analyzer TaskAnalyzer) makeVerdictGraphicalMethod() bool {
+	pocketPairs := analyzer.getResultPocketPairs()
+	pointsActual := analyzer.calculateActualPoints(pocketPairs)
+	pointsPositiveInterval, pointsNegativeInterval := analyzer.calculateConfidenceIntervalsPoints(pocketPairs)
+
+	Verdict := true
+	for i := 0; i < len(pointsActual); i++ {
+		pocketIsNotEmpty := len(pocketPairs[i]) > 0
+		fmt.Print(strconv.Itoa(i) + ": ")
+		fmt.Println(len(pocketPairs[i]))
+		if (pointsActual[i].Frequence > pointsPositiveInterval[i].Frequence || pointsActual[i].Frequence < pointsNegativeInterval[i].Frequence) && pocketIsNotEmpty {
+			Verdict = false
+			break
+		}
+	}
+
+	return Verdict
+}
+
+// * МЕТОДЫ ДЛЯ АНАЛИЗА НА ОСНОВЕ ГИПОТЕЗ
+
+// Отношение правдоподобия для гипотезы о корректности задания
+func (analyzer TaskAnalyzer) calculateCorrectTaskLikelihoodRatio() float64 {
+	sum := 0.0
+	for _, value := range analyzer.resultPairs {
+		if value.Result {
+			sum += math.Log(birnbaum(analyzer.guessingProbability, analyzer.actualDifficulty, value.Theta))
+		} else {
+			sum += math.Log(1 - birnbaum(analyzer.guessingProbability, analyzer.actualDifficulty, value.Theta))
+		}
+	}
+
+	return sum
+}
+
+// Отношение правдоподобия для гипотезы об индефферентности задания
+func (analyzer TaskAnalyzer) calculateIndifferentTaskLikelihoodRatio() float64 {
+	return -1.0 * float64(len(analyzer.resultPairs)) * math.Ln2
+}
+
+// Отношение правдоподобия для гипотезы о некорректности задания
+func (analyzer TaskAnalyzer) calculateIncorrectTaskLikelihoodRatio() float64 {
+	sum := 0.0
+	for _, value := range analyzer.resultPairs {
+		exponent := math.Exp(-1 * 1.71 * (value.Theta - analyzer.actualDifficulty))
+		localBirnbaum := analyzer.guessingProbability + (1-analyzer.guessingProbability)*(exponent/(1+exponent))
+		if value.Result {
+			sum += math.Log(localBirnbaum)
+		} else {
+			sum += math.Log(1 - localBirnbaum)
+		}
+	}
+
+	return sum
+}
+
+func (analyzer TaskAnalyzer) makeHypothesisMethodVerdict() string {
+	var likelihoodRatios []float64
+	likelihoodRatios = append(likelihoodRatios, analyzer.calculateCorrectTaskLikelihoodRatio())
+	likelihoodRatios = append(likelihoodRatios, analyzer.calculateIndifferentTaskLikelihoodRatio())
+	likelihoodRatios = append(likelihoodRatios, analyzer.calculateIncorrectTaskLikelihoodRatio())
+
+	sort.Float64s(likelihoodRatios)
+	var Verdict string
+	switch likelihoodRatios[len(likelihoodRatios)-1] {
+
+	case analyzer.calculateCorrectTaskLikelihoodRatio():
+		Verdict = "Correct " + strconv.FormatFloat(analyzer.calculateCorrectTaskLikelihoodRatio(), 'f', -1, 64)
+
+	case analyzer.calculateIndifferentTaskLikelihoodRatio():
+		Verdict = "Indifferent " + strconv.FormatFloat(analyzer.calculateIndifferentTaskLikelihoodRatio(), 'f', -1, 64)
+
+	case analyzer.calculateIncorrectTaskLikelihoodRatio():
+		Verdict = "Incorrect " + strconv.FormatFloat(analyzer.calculateIncorrectTaskLikelihoodRatio(), 'f', -1, 64)
+
+	}
+
+	return Verdict
+}
+
+// * БЛОК ВСПОМОГАТЕЛЬНЫХ ФУНКЦИЙ ДЛЯ ГРАФИЧЕСКОГО АНАЛИЗА
+// TODO Вынести в методы
 
 // Парсит csv-файл с результатами и теттами в соответствующий срез
 func parseThetaResultPairs(filePath string) []thetaResultPair {
@@ -189,8 +341,8 @@ func parseThetaResultPairs(filePath string) []thetaResultPair {
 		}
 
 		var pair thetaResultPair
-		pair.result = resultValue != 0
-		pair.theta = float64(thetaValue)
+		pair.Result = resultValue != 0
+		pair.Theta = float64(thetaValue)
 
 		pairs = append(pairs, pair)
 	}
@@ -204,12 +356,12 @@ func minMaxTheta(pairs []thetaResultPair) (float64, float64) {
 	max := -10.0
 
 	for _, value := range pairs {
-		if value.theta < min {
-			min = value.theta
+		if value.Theta < min {
+			min = value.Theta
 		}
 
-		if value.theta > max {
-			max = value.theta
+		if value.Theta > max {
+			max = value.Theta
 		}
 	}
 
@@ -220,7 +372,7 @@ func minMaxTheta(pairs []thetaResultPair) (float64, float64) {
 func goodAnswersAmount(pairs []thetaResultPair) int {
 	amount := 0
 	for _, value := range pairs {
-		if value.result {
+		if value.Result {
 			amount++
 		}
 	}
@@ -229,7 +381,7 @@ func goodAnswersAmount(pairs []thetaResultPair) int {
 }
 
 // Функция Бирнбаума
-func birnbaum(c float64, delta float64, theta float64) float64 {
-	exponent := math.Exp(1.71 * (theta - delta))
+func birnbaum(c float64, delta float64, Theta float64) float64 {
+	exponent := math.Exp(1.71 * (Theta - delta))
 	return c + (1-c)*(exponent/(1+exponent))
 }

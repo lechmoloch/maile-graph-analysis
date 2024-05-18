@@ -5,8 +5,9 @@ import (
 )
 
 func main() {
-	const inputFilePath string = "Data/data.csv"
-	const outputFilePath string = "Data/output.csv"
+	const inputDataFilePath string = "Data/data.csv"
+	const outputCSVFilePath string = "Data/output-graph.csv"
+	const outputJSONFilePath string = "Data/output.json"
 
 	actualDifficulty := 2.0
 	guessingProbability := 0.001388889
@@ -14,8 +15,9 @@ func main() {
 	analyzer := TaskAnalysis.NewTaskAnalyzer(
 		actualDifficulty,
 		guessingProbability,
-		inputFilePath,
+		inputDataFilePath,
 	)
 
-	analyzer.WriteGraphData(outputFilePath)
+	analyzer.WriteGraphDataToCSV(outputCSVFilePath)
+	analyzer.WriteAllMethodsDataToJSON(outputJSONFilePath)
 }
