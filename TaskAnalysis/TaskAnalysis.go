@@ -44,6 +44,7 @@ type AllMethodsData struct {
 	HypothesisMethodData HypothesisMethodData
 }
 
+// Основная структура, представляет из себя анализатор задания, что бы это ни значило
 type TaskAnalyzer struct {
 	actualDifficulty    float64
 	guessingProbability float64
@@ -295,6 +296,7 @@ func (analyzer TaskAnalyzer) calculateIncorrectTaskLikelihoodRatio() float64 {
 	return sum
 }
 
+// Совершение вердикта на основе гипотетического метода
 func (analyzer TaskAnalyzer) makeVerdictOnHypothesisMethod() string {
 	var likelihoodRatios []float64
 	likelihoodRatios = append(likelihoodRatios, analyzer.calculateCorrectTaskLikelihoodRatio())
