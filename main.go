@@ -6,7 +6,7 @@ import (
 
 func main() {
 
-	// Констатные пути-названия для файлов ввода-вывода
+	// Константные пути-названия для файлов ввода-вывода
 	const inputDataFilePath string = "Data/data.csv"
 	const outputCSVFilePath string = "Data/output-graph.csv"
 	const outputJSONFilePath string = "Data/output.json"
