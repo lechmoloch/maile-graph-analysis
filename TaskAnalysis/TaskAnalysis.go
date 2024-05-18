@@ -83,12 +83,12 @@ func (analyzer TaskAnalyzer) WriteAllMethodsDataToJSON(outputFilePath string) {
 	}
 
 	var GraphicalMethodData GraphicalMethodData = GraphicalMethodData{
-		Verdict: analyzer.makeVerdictGraphicalMethod(),
+		Verdict: analyzer.makeVerdictOnGraphicalMethod(),
 		Points:  allGraphPoints,
 	}
 
 	var HypothesisMethodData HypothesisMethodData = HypothesisMethodData{
-		Verdict:                        analyzer.makeHypothesisMethodVerdict(),
+		Verdict:                        analyzer.makeVerdictOnHypothesisMethod(),
 		CorrectTaskLikelihoodRatio:     analyzer.calculateCorrectTaskLikelihoodRatio(),
 		IndifferentTaskLikelihoodRatio: analyzer.calculateIndifferentTaskLikelihoodRatio(),
 		IncorrectTaskLikelihoodRatio:   analyzer.calculateIncorrectTaskLikelihoodRatio(),
@@ -196,11 +196,23 @@ func (analyzer TaskAnalyzer) calculateConfidenceIntervalsPoints(pocketPairs [][]
 	var positiveConfidenceIntervalPoints, negativeConfidenceIntervalPoints []graphPoint
 	for _, currentPocketPairs := range pocketPairs {
 		studentsAmount := float64(len(currentPocketPairs))
-		Frequence := float64(goodAnswersAmount(currentPocketPairs)) / float64(len(currentPocketPairs))
+		// Frequence := float64(goodAnswersAmount(currentPocketPairs)) / float64(len(currentPocketPairs))
+		Frequence := birnbaum(
+			analyzer.guessingProbability,
+			analyzer.actualDifficulty,
+			currentPocketPairs[0].Theta,
+		)
 		sigma := math.Sqrt(studentsAmount * Frequence * (1 - Frequence))
 
 		Theta := currentPocketPairs[0].Theta
 		var pointPositive, pointNegative graphPoint
+
+		fmt.Println("i: " + strconv.Itoa(int(Theta)))
+		fmt.Println("studentsAmount:" + strconv.Itoa(int(studentsAmount)))
+		fmt.Print("Frequence: ")
+		fmt.Println(Frequence)
+		fmt.Print("Sigma: ")
+		fmt.Println(sigma)
 
 		pointPositive = graphPoint{
 			Theta,
@@ -229,7 +241,7 @@ func (analyzer TaskAnalyzer) calculateAllGraphPoints() ([]graphPoint, []graphPoi
 }
 
 // Вычисление вердикта по графическому методу
-func (analyzer TaskAnalyzer) makeVerdictGraphicalMethod() bool {
+func (analyzer TaskAnalyzer) makeVerdictOnGraphicalMethod() bool {
 	pocketPairs := analyzer.getResultPocketPairs()
 	pointsActual := analyzer.calculateActualPoints(pocketPairs)
 	pointsPositiveInterval, pointsNegativeInterval := analyzer.calculateConfidenceIntervalsPoints(pocketPairs)
@@ -237,8 +249,6 @@ func (analyzer TaskAnalyzer) makeVerdictGraphicalMethod() bool {
 	Verdict := true
 	for i := 0; i < len(pointsActual); i++ {
 		pocketIsNotEmpty := len(pocketPairs[i]) > 0
-		fmt.Print(strconv.Itoa(i) + ": ")
-		fmt.Println(len(pocketPairs[i]))
 		if (pointsActual[i].Frequence > pointsPositiveInterval[i].Frequence || pointsActual[i].Frequence < pointsNegativeInterval[i].Frequence) && pocketIsNotEmpty {
 			Verdict = false
 			break
@@ -285,7 +295,7 @@ func (analyzer TaskAnalyzer) calculateIncorrectTaskLikelihoodRatio() float64 {
 	return sum
 }
 
-func (analyzer TaskAnalyzer) makeHypothesisMethodVerdict() string {
+func (analyzer TaskAnalyzer) makeVerdictOnHypothesisMethod() string {
 	var likelihoodRatios []float64
 	likelihoodRatios = append(likelihoodRatios, analyzer.calculateCorrectTaskLikelihoodRatio())
 	likelihoodRatios = append(likelihoodRatios, analyzer.calculateIndifferentTaskLikelihoodRatio())
